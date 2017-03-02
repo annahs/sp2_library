@@ -1,4 +1,4 @@
-#module for dealing with SP2 raw data
+#!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 import sys
 import os
@@ -10,31 +10,46 @@ import math
 import mysql.connector
 from datetime import datetime
 import calendar
-from SP2_particle_record_UTC import ParticleRecord
+from SP2_particle_record import ParticleRecord
 
-def make_plot(record):
-	x_vals_all = record.getAcqPoints()
-	y_vals_all = record.getScatteringSignal()	
-	y_vals_split = record.getSplitDetectorSignal()
-	y_vals_incand = record.getWidebandIncandSignal()
+"""
+This module contains methods for dealing with raw .sp2b files
+"""
+
+
+def make_plot(particle_record):
+	"""
+	plot raw data signals
+	"""
+	x_vals_all 			= particle_record.getAcqPoints()
+	y_vals_scat_HG 		= particle_record.scatData	
+	y_vals_scat_LG 		= particle_record.lowGainScatData
+	y_vals_incand_HG 	= particle_record.wideBandIncandData
+	y_vals_incand_LG 	= particle_record.lowGainWideBandIncandData
+	y_vals_split_HG 	= particle_record.splitData
+
 
 	fig = plt.figure()
 	ax1 = fig.add_subplot(111)
-	ax1.plot(x_vals_all,y_vals_all,'o', markerfacecolor='None', label = 'HG scattering signal')  
-	ax1.plot(x_vals_all, y_vals_incand, color ='red',marker = 'o', linestyle = 'None', label = 'HG incandescent signal')
+	ax1.plot(x_vals_all, y_vals_scat_HG,'o', markerfacecolor='None', label = 'HG scattering signal')  
+	ax1.plot(x_vals_all, y_vals_scat_LG,'s', markerfacecolor='None', label = 'LG scattering signal')  
+	ax1.plot(x_vals_all, y_vals_incand_HG, color ='red',marker = 'o', linestyle = 'None', label = 'HG incandescent signal')
+	ax1.plot(x_vals_all, y_vals_incand_LG, color ='red',marker = 's', linestyle = 'None', label = 'LG incandescent signal')
 	ax1.set_xlabel('data point #')
 	ax1.set_ylabel('amplitude (a.u.)')
 	#ax1.plot(x_vals_all, y_vals_split, 'o', color ='green')
 
 	plt.legend()
-	plt.show(block=False)
-	raw_input("Hit Enter see next")
-	plt.close()
+	plt.show()
+
 
 	
-def defineIncandInsertStatement(number_of_channels,instrument_locn):
+def defineIncandInsertStatement(number_of_channels,table_name):
+	"""
+	define the datbase insert statement for incandescent particles
+	"""
 	if number_of_channels == 8:
-		insert_statement = ('''INSERT INTO  sp2_single_particle_data_locn''' + str(instrument_locn) + '''							  
+		insert_statement = ('''INSERT INTO  ''' + table_name + '''							  
 				  (instr_ID,
 				  instr_location_ID,
 				  sp2b_file, 
@@ -63,7 +78,7 @@ def defineIncandInsertStatement(number_of_channels,instrument_locn):
 				  )''')
 
 	if number_of_channels == 4:
-		insert_statement = ('''INSERT INTO  sp2_single_particle_data_locn''' + str(instrument_locn) + '''							  
+		insert_statement = ('''INSERT INTO  ''' + table_name + '''							  
 				  (instr_ID,
 				  instr_location_ID,
 				  sp2b_file, 
@@ -87,9 +102,12 @@ def defineIncandInsertStatement(number_of_channels,instrument_locn):
 
 	return insert_statement
 
-def defineNonincandInsertStatement(number_of_channels,instrument_locn):
+def defineNonincandInsertStatement(number_of_channels,table_name):
+	"""
+	define the database insert statement for non-incandescent particles
+	"""
 	if number_of_channels == 8:
-		insert_statement = ('''INSERT INTO  sp2_single_nonincand_particle_data_locn''' + str(instrument_locn) + '''							  
+		insert_statement = ('''INSERT INTO  ''' + table_name + '''							  
 				  (instr_ID,
 				  instr_location_ID,
 				  sp2b_file, 
@@ -114,7 +132,7 @@ def defineNonincandInsertStatement(number_of_channels,instrument_locn):
 				  )''')
 
 	if number_of_channels == 4:
-		insert_statement = ('''INSERT INTO  sp2_single_nonincand_particle_data_locn''' + str(instrument_locn) + '''							  
+		insert_statement = ('''INSERT INTO  ''' + table_name + '''							  
 				  (instr_ID,
 				  instr_location_ID,
 				  sp2b_file, 
@@ -137,9 +155,10 @@ def defineNonincandInsertStatement(number_of_channels,instrument_locn):
 	return insert_statement
 
 
-
 def writeIncandParticleData(sp2b_file,parameters,prev_particle_ts,count,insert_statement,cnx,cursor):
-	
+	"""
+	Parse the raw data records and write information from incandescent particles to the database
+	"""
 	record_index = 0      
 	multiple_records = []
 	i=1
@@ -152,10 +171,6 @@ def writeIncandParticleData(sp2b_file,parameters,prev_particle_ts,count,insert_s
 		particle_record.incandPeakInfo() 			
 		bbhg_incand_pk_amp = float(particle_record.incandMax)
 		bbhg_incand_pk_pos = float(particle_record.incandMaxPos)
-
-		if parameters['show_plot'] == True:
-			print parameters['file_name'], record_index
-			make_plot(particle_record)
 
 		#if this is an incandescent particle that we can detect with the HG channel then continue 
 		if bbhg_incand_pk_amp >= parameters['min_detectable_signal']:
@@ -228,7 +243,9 @@ def writeIncandParticleData(sp2b_file,parameters,prev_particle_ts,count,insert_s
 
 
 def writeNonincandParticleData(sp2b_file,parameters,prev_particle_ts,count,insert_statement,cnx,cursor):
-	
+	"""
+	Parse the raw data records and write information from non-incandescent particles to the database
+	"""	
 	record_index = 0      
 	multiple_records = []
 	i=1

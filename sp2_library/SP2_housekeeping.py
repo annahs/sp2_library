@@ -1,4 +1,5 @@
-#module for dealing with SP2 housekeeping files
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
 import sys
 import os
 import numpy as np
@@ -11,12 +12,15 @@ import calendar
 import os.path
 import SP2_utilities
 
+"""
+This module has methods for dealing with SP2 housekeeping files
+"""
 
 def defineHKInsertStatement(hk_table):
 	#create insert statement variable for database updating
 	add_interval = ('''INSERT INTO  ''' + hk_table + '''
               (instr_ID,
-              instr_locn_ID,
+              instr_location_ID,
               UNIX_UTC_ts_int_start,
               UNIX_UTC_ts_int_end,
               sample_flow,
@@ -25,7 +29,7 @@ def defineHKInsertStatement(hk_table):
               yag_xtal_temp)
               VALUES (
               %(instr_ID)s,
-              %(instr_locn_ID)s,
+              %(instr_location_ID)s,
               %(UNIX_UTC_ts_int_start)s,
               %(UNIX_UTC_ts_int_end)s,
               %(sample_flow)s,
@@ -45,15 +49,15 @@ def HKfileToDatabase(hk_file,add_interval,parameters,last_ts,cnx,cursor):
 	hk_file.readline()
 	for line in hk_file: 
 		newline = line.split()
-		seconds_past_midnight = float(newline[parameters['seconds_past_midnight_col']  ])
+		seconds_past_midnight = float(newline[parameters['seconds_past_midnight_col']])
 		UNIX_date = calendar.timegm(parameters['file_date'].utctimetuple())
-		UNIX_time_stamp_UTC_end = UNIX_date + seconds_past_midnight
+		UNIX_time_stamp_UTC_end = UNIX_date + seconds_past_midnight - parameters['timezone']*3600
 		UNIX_time_stamp_UTC_start = prev_UNIX_time_stamp_UTC
 		prev_UNIX_time_stamp_UTC = UNIX_time_stamp_UTC_end
 
 		single_record = {
 		'instr_ID':				parameters['instr_ID'],
-		'instr_locn_ID':		parameters['instrument_locn'],
+		'instr_location_ID':	parameters['instr_location_ID'],
 		'UNIX_UTC_ts_int_start':UNIX_time_stamp_UTC_start,
 		'UNIX_UTC_ts_int_end': 	UNIX_time_stamp_UTC_end,
 		'sample_flow':  		float(newline[parameters['sample_flow_col']  ]),
@@ -77,15 +81,16 @@ def HKfileToDatabase(hk_file,add_interval,parameters,last_ts,cnx,cursor):
 			cnx.commit()
 			multiple_records = []
 
-	last_ts = UNIX_time_stamp_UTC_end
+	try:
+		last_ts = UNIX_time_stamp_UTC_end
+	except:
+		last_ts = np.nan
+
 	return multiple_records, last_ts
 
 
 
-def addHKKeysToRawDataTable(parameters):
-	#open database connection
-	cnx = mysql.connector.connect(user='root', password='', host='localhost', database=parameters['database_name'])
-	cursor = cnx.cursor()
+def addHKKeysToRawDataTable(parameters,cnx,cursor):
 
 	#select hk data from the hk table for a given time block
 	cursor.execute('''
@@ -96,8 +101,9 @@ def addHKKeysToRawDataTable(parameters):
 		FROM ''' + parameters['hk_table'] + ''' 
 		WHERE 
 			UNIX_UTC_ts_int_start >= %s 
-			AND UNIX_UTC_ts_int_start < %s''',
-		(parameters['UNIX_start'],parameters['UNIX_end']))
+			AND UNIX_UTC_ts_int_start < %s
+			AND instr_ID = %s''',
+		(parameters['UNIX_start'],parameters['UNIX_end'],parameters['instr_ID']))
 	hk_data = cursor.fetchall()
 
 
@@ -115,15 +121,21 @@ def addHKKeysToRawDataTable(parameters):
 				hk_id = %s 
 			WHERE 
 				UNIX_UTC_ts_int_end >= %s 
-				AND UNIX_UTC_ts_int_end < %s'''),
-			(id,hk_start_time,hk_end_time))	
+				AND UNIX_UTC_ts_int_end < %s
+				AND instr_ID = %s'''),
+			(id,hk_start_time,hk_end_time,parameters['instr_ID']))	
 		cnx.commit()
 		
 		i+=1
 		if (i % 5000) == 0:
 			print 'fraction done: ', round(i*1./len(hk_data),2)
 			
-	cnx.close()
+	
+
+
+
+
+
 
 	
 		

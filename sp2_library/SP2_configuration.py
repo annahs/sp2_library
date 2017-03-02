@@ -44,17 +44,16 @@ def getConfigData(config_file):
 
 
 def _createConfigInsertStatement(config_table):
-	#create insert statement variable for database updating
 	add_interval = ('''INSERT INTO  ''' + config_table + '''
               (instr_ID,
-              instr_locn_ID,
+              instr_location_ID,
               UNIX_UTC_ts_int_start,
               UNIX_UTC_ts_int_end,
               1_in_x_particles,
               1_in_x_minutes)
               VALUES (
               %(instr_ID)s,
-              %(instr_locn_ID)s,
+              %(instr_location_ID)s,
               %(UNIX_UTC_ts_int_start)s,
               %(UNIX_UTC_ts_int_end)s,
               %(1_in_x_particles)s,
@@ -64,17 +63,12 @@ def _createConfigInsertStatement(config_table):
 
 
 
-def writeConfigData(parameters,UNIX_time_stamp_UTC_start,UNIX_time_stamp_UTC_end,sample_factor_particle,sample_factor_time):
-	
-	#open database connection
-	cnx = mysql.connector.connect(user='root', password='', host='localhost', database=parameters['database'])
-	cursor = cnx.cursor()
-
+def writeConfigData(parameters,UNIX_time_stamp_UTC_start,UNIX_time_stamp_UTC_end,sample_factor_particle,sample_factor_time,cnx,cursor):
 	add_interval = _createConfigInsertStatement(parameters['config_table'])
 
 	single_record = {
 					'instr_ID':parameters['instr_ID'],
-              		'instr_locn_ID':parameters['instrument_locn'],
+              		'instr_location_ID':parameters['instr_locn_ID'],
 					'UNIX_UTC_ts_int_start': float(UNIX_time_stamp_UTC_start),
 					'UNIX_UTC_ts_int_end': float(UNIX_time_stamp_UTC_end),
 					'1_in_x_particles':  sample_factor_particle, 
@@ -84,6 +78,5 @@ def writeConfigData(parameters,UNIX_time_stamp_UTC_start,UNIX_time_stamp_UTC_end
 	cursor.execute(add_interval, single_record)
 	cnx.commit()
 
-	cnx.close()
 
 

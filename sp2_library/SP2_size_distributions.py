@@ -116,7 +116,7 @@ class SizeDistribution(object,dbConnection):
 		self._writeBinnedDataToDatabase()
 		
 	
-	def _assembleIntervalData(self):
+	def assembleIntervalData(self):
 		interval_data_dict = {}
 		interval_sampled_volume = 0
 		interval_mass = 0
@@ -160,7 +160,7 @@ class SizeDistribution(object,dbConnection):
 		
 
 	
-	def _binAssembledData(self):
+	def binAssembledData(self):
 		raw_dia_list = self.assembled_interval_data['VED list']
 		total_vol_sccm = self.assembled_interval_data['sampled volume']
 
