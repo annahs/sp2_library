@@ -29,29 +29,30 @@ class TimeInterval(object,dbConnection):
 		dbConnection.__init__(self, database_name)
 		
 
-		self.instr_location_ID 		= instr_location_ID 
-		self.instr_ID     			= instr_ID
-		self.interval_start 		= interval_start
-		self.interval_end   		= interval_end
-		self.temperature    		= 273.15  	#default is STP
-		self.pressure       		= 101325  	#default is STP
-		self.altitude				= 1 		#default is 1m above amsl
-		self.rBC_density 			= 1.8 		#g/mol - Bond and Bergstrom 2006
-		self.interval_max			= 500.   	#maximum time between particles (in sec) 
-
+		self.instr_location_ID 			= instr_location_ID 
+		self.instr_ID     				= instr_ID
+		self.interval_start 			= interval_start
+		self.interval_end   			= interval_end
+		self.temperature    			= 273.15  	#default is STP
+		self.pressure       			= 101325  	#default is STP
+		self.altitude					= 1 		#default is 1m above amsl
+		self.rBC_density 				= 1.8 		#g/mol - Bond and Bergstrom 2006
+		self.interval_max				= 500.   	#maximum time between particles (in sec) 
+		self.extrapolate_calibration 	= False
+		
 		self.calibration_ID = None
 		self.assembled_interval_data = None
 		self.binned_data = None
 		self.interval_db_id = None
 
-		self._retrieveInstrInfo()				#get basic instrument info
-		self._retrieveSampleFactors()			#get all sample factors for this interval
-		self._retrieveCalibrationData()			#get HG and LG calibration info for this interval
-		self._retrieveHousekeepingLimits()		#get values for QC based on housekeeping parameters
+		self.retrieveInstrInfo()				#get basic instrument info
+		self.retrieveSampleFactors()			#get all sample factors for this interval
+		self.retrieveCalibrationData()			#get HG and LG calibration info for this interval
+		self.retrieveHousekeepingLimits()		#get values for QC based on housekeeping parameters
 
 
 
-	def _retrieveHousekeepingLimits(self):
+	def retrieveHousekeepingLimits(self):
 		self.db_cur.execute('''
 		SELECT 
 			yag_min,
@@ -76,10 +77,12 @@ class TimeInterval(object,dbConnection):
 		self.sample_flow_max = hk_limits[0][3]
 
 
-	def _retrieveInstrInfo(self):
+	def retrieveInstrInfo(self):
 		self.db_cur.execute('''
 		SELECT 
-			number_of_channels
+			number_of_channels,
+			min_detectable_signal,
+			saturation_limit
 		FROM
 			sp2_instrument_info 
 		WHERE
@@ -91,11 +94,12 @@ class TimeInterval(object,dbConnection):
 		
 		instr_info = self.db_cur.fetchall()
 
-		self.number_of_channels = instr_info[0][0]
+		self.number_of_channels 	= instr_info[0][0]
+		self.min_detectable_signal 	= instr_info[0][1]
+		self.saturation_limit 		= instr_info[0][2]
 
 
-
-	def _retrieveSampleFactors(self):
+	def retrieveSampleFactors(self):
 		
 		#set default
 		sample_factors = [(self.interval_start,self.interval_end,1)]
@@ -122,10 +126,9 @@ class TimeInterval(object,dbConnection):
 
 		self.sample_factors = sample_factors
 
-
 	
-	def _retrieveCalibrationData(self):
-
+	def retrieveCalibrationData(self):
+		
 		calibration_data = {}
 		for channel in ['BBHG_incand','BBLG_incand']:
 			self.db_cur.execute('''
@@ -151,7 +154,7 @@ class TimeInterval(object,dbConnection):
 			(self.instr_ID,self.instr_location_ID,channel,self.interval_start))
 
 			calib_coeffs = self.db_cur.fetchall()
-
+			
 			if calib_coeffs == []:
 				calib_coeffs_np = [[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,'Aquadag',np.nan]]
 			else:
@@ -175,12 +178,16 @@ class TimeInterval(object,dbConnection):
 			if channel == 'BBLG_incand':
 				self.LG_calibration_ID = float(calib_ID)
 
-			pkht_ll, pkht_ul = self._retrieveCalibrationLimits(calib_ID)
-		
+
+			if self.extrapolate_calibration == False:
+				pkht_ll, pkht_ul = self._retrieveCalibrationLimits(calib_ID)
+			else:
+				pkht_ll = self.min_detectable_signal
+				pkht_ul = self.saturation_limit
+
 			calibration_data[channel] = [pkht_ll, pkht_ul, calib_0, calib_1, calib_2, calib_0_err, calib_1_err, calib_2_err]
 
 		self.calibration_info = calibration_data
-		
 
 
 	def _retrieveCalibrationLimits(self,calib_ID):
@@ -287,14 +294,17 @@ class TimeInterval(object,dbConnection):
 			STP_correction_factor = (self.pressure/101325)*(273.15/self.temperature)
 			particle_sample_vol =  sample_flow*(ind_end_time-ind_start_time)*STP_correction_factor/(60*sample_factor)   #factor of 60 needed because flow is in sccm and time is in seconds
 			interval_sampled_volume += particle_sample_vol
-			
+
 			rBC_mass,rBC_mass_uncertainty = self.calculateMass(BB_incand_HG,BB_incand_LG,ind_end_time)
 			VED = SP2_utilities.calculateVED(self.rBC_density,rBC_mass)
-			
+
 			if np.isnan(VED) == False:   #VED and mass are nan if the particle is outside of the min and max size limits.  In this case we still need to account for the volume of air sampled, but we want to ignore the particle
 				interval_mass += rBC_mass
 				interval_mass_uncertainty += rBC_mass_uncertainty
 				ved_list.append(VED)
+			else:
+				ved_list.append(np.nan)  #we still want to count particles even if we can't calculate a mass
+				
 		
 		interval_data_dict['VED list'] = ved_list
 		interval_data_dict['total mass'] = interval_mass
@@ -303,7 +313,6 @@ class TimeInterval(object,dbConnection):
 		interval_data_dict['sampled volume'] = interval_sampled_volume
 
 		self.assembled_interval_data = interval_data_dict
-
 	
 	#Binned data methods
 	def binAssembledData(self,binning_increment):
@@ -368,7 +377,7 @@ class TimeInterval(object,dbConnection):
 		max_detectible_mass = np.nansum([HG_calib_0,(HG_calib_1*HG_pkht_ul),(HG_calib_2*HG_pkht_ul*HG_pkht_ul)])
 
 		if self.number_of_channels == 8:
-			LG_pkht_ll, LG_pkht_ul, LG_calib_0, LG_calib_1, LG_calib_2, LG_calib_0_err, LG_calib_1_err, LG_calib_2_err = self.calibration_info['BBHG_incand']
+			LG_pkht_ll, LG_pkht_ul, LG_calib_0, LG_calib_1, LG_calib_2, LG_calib_0_err, LG_calib_1_err, LG_calib_2_err = self.calibration_info['BBLG_incand']
 			max_detectible_mass = np.nansum([LG_calib_0,(LG_calib_1*LG_pkht_ul),(LG_calib_2*LG_pkht_ul*LG_pkht_ul)])
 
 		#min and max VEDs for binning
@@ -405,7 +414,6 @@ class TimeInterval(object,dbConnection):
 		#get calibration coefficients and detection limits for this calibration (may be detector limits or limits of calibration)
 		#HG channel is present in all instrument types	
 		HG_pkht_ll, HG_pkht_ul, HG_calib_0, HG_calib_1, HG_calib_2, HG_calib_0_err, HG_calib_1_err, HG_calib_2_err = self.calibration_info['BBHG_incand']
-
 		#check if this particle has a signal outside the detection limits. If it does, return NaN for the mass and VED
 		if self.number_of_channels == 4:			
 			if (BB_incand_HG <= HG_pkht_ll) or (BB_incand_HG >= HG_pkht_ul): #check if this particle has a signal outside the calibration limits. If it does, return NaN for the mass and VED
