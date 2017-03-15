@@ -1,4 +1,5 @@
-#module for dealing with SP2 configuration files
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
 import sys
 import os
 import numpy as np
