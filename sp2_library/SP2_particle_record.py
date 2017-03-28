@@ -95,7 +95,8 @@ class ParticleRecord(object):
 
 
 		start_byte = 0
-		#get the data record length (180 for UBCSP2 2012 - present, 300 for ECSP2 2009, 100 for CalTech SP2 at Soledad)
+
+		#get the data record length
 		data_length = unpack('>I',record[start_byte:start_byte+4])
 		start_byte += 4
 
@@ -179,8 +180,8 @@ class ParticleRecord(object):
 		
 		#this combines the above with The time position within the buffer of data at which the event was found.  gives UNIXts inUTC
 		self.timestamp  = labview_timestamp+event_index[0]/acq_rate-2082844800 #UNIX epoch is 1 Jan 1970, Labview epoch is 1 Jan 1904 therefore LVts_to_UNIXts = -2082844800 
-	
 		#self.flag = flag[0]
+
 
 	def getAcqPoints(self):
 		"""

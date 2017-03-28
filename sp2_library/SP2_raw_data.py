@@ -28,13 +28,16 @@ def make_plot(particle_record):
 	y_vals_incand_LG 	= particle_record.lowGainWideBandIncandData
 	y_vals_split_HG 	= particle_record.splitData
 
-
 	fig = plt.figure()
 	ax1 = fig.add_subplot(111)
 	ax1.plot(x_vals_all, y_vals_scat_HG,'o', markerfacecolor='None', label = 'HG scattering signal')  
-	ax1.plot(x_vals_all, y_vals_scat_LG,'s', markerfacecolor='None', label = 'LG scattering signal')  
 	ax1.plot(x_vals_all, y_vals_incand_HG, color ='red',marker = 'o', linestyle = 'None', label = 'HG incandescent signal')
-	ax1.plot(x_vals_all, y_vals_incand_LG, color ='red',marker = 's', linestyle = 'None', label = 'LG incandescent signal')
+	
+	if y_vals_scat_LG != []:
+		ax1.plot(x_vals_all, y_vals_scat_LG,'s', markerfacecolor='None', label = 'LG scattering signal')  
+	if y_vals_incand_LG != []:
+		ax1.plot(x_vals_all, y_vals_incand_LG, color ='red',marker = 's', linestyle = 'None', label = 'LG incandescent signal')
+	
 	ax1.set_xlabel('data point #')
 	ax1.set_ylabel('amplitude (a.u.)')
 	#ax1.plot(x_vals_all, y_vals_split, 'o', color ='green')
@@ -216,6 +219,9 @@ def writeIncandParticleData(sp2b_file,parameters,prev_particle_ts,count,insert_s
 				'BB_incand_HG_pkpos':bbhg_incand_pk_pos,
 				'NB_incand_HG_pkht':nbhg_incand_pk_amp,
 				}
+
+			if 'mob_dia' in parameters:
+				single_record['mob_dia'] = parameters['mob_dia']
 
 			multiple_records.append((single_record))
 			#bulk insert to db table
