@@ -154,31 +154,30 @@ class TimeInterval(object,dbConnection):
 			(self.instr_ID,self.instr_location_ID,channel,self.interval_start))
 
 			calib_coeffs = self.db_cur.fetchall()
-			
 			if calib_coeffs == []:
 				calib_coeffs_np = [[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,'Aquadag',np.nan]]
 			else:
 				calib_coeffs_np = np.array(calib_coeffs, dtype=[('term0', 'f4'),('term1', 'f4'),('term2', 'f4'),('term0err', 'f4'),('term1err', 'f4'),('term2err', 'f4'),('mat', 'S7'),('ID', 'f4'),])  #converts Nones to nans for calculations
 
-
+			#Aqudag correction
 			for row in calib_coeffs_np:
 				calib_material 	= row[6]
 				calib_ID 		= row[7]
 				calib_0 		= row[0]
 				calib_0_err		= row[3]
-
 				if calib_material == 'Aquadag':
 					calib_1 	= row[1]/0.7
 					calib_1_err = row[4]/0.7
 					calib_2 	= row[2]/0.7
 					calib_2_err = row[5]/0.7
-						
+					
+			#set calibration ids		
 			if channel == 'BBHG_incand':
 				self.HG_calibration_ID = float(calib_ID)
 			if channel == 'BBLG_incand':
 				self.LG_calibration_ID = float(calib_ID)
 
-
+			#get the signal limits for calculating mass
 			if self.extrapolate_calibration == False:
 				pkht_ll, pkht_ul = self._retrieveCalibrationLimits(calib_ID)
 			else:
@@ -298,12 +297,10 @@ class TimeInterval(object,dbConnection):
 			rBC_mass,rBC_mass_uncertainty = self.calculateMass(BB_incand_HG,BB_incand_LG,ind_end_time)
 			VED = SP2_utilities.calculateVED(self.rBC_density,rBC_mass)
 
-			if np.isnan(VED) == False:   #VED and mass are nan if the particle is outside of the min and max size limits.  In this case we still need to account for the volume of air sampled, but we want to ignore the particle
+			if self.min_VED <= VED <= self.max_VED:  #we limit mass and number concentrations to within the set size limits
 				interval_mass += rBC_mass
 				interval_mass_uncertainty += rBC_mass_uncertainty
 				ved_list.append(VED)
-			else:
-				ved_list.append(np.nan)  #we still want to count particles even if we can't calculate a mass
 				
 		
 		interval_data_dict['VED list'] = ved_list
@@ -313,7 +310,8 @@ class TimeInterval(object,dbConnection):
 		interval_data_dict['sampled volume'] = interval_sampled_volume
 
 		self.assembled_interval_data = interval_data_dict
-	
+
+
 	#Binned data methods
 	def binAssembledData(self,binning_increment):
 		"""
@@ -425,7 +423,7 @@ class TimeInterval(object,dbConnection):
 			if (BB_incand_HG <= HG_pkht_ll) or (BB_incand_LG >= LG_pkht_ul):
 				return np.nan, np.nan
 
-		#if the signal is within the detection limits, continue to calculate mass and VED.  
+		#if the signal is within the detection limits, continue to calculate mass 
 		#based on the signal and instrument parameters, choose to use low or high gain channel.  The default is to use the high gain channel if possible.
 		if BB_incand_HG < HG_pkht_ul:
 			signal = BB_incand_HG
