@@ -155,7 +155,7 @@ class TimeInterval(object,dbConnection):
 
 			calib_coeffs = self.db_cur.fetchall()
 			if calib_coeffs == []:
-				calib_coeffs_np = [[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,'Aquadag',np.nan]]
+				calib_coeffs_np = [[np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,'nan',np.nan]]
 			else:
 				calib_coeffs_np = np.array(calib_coeffs, dtype=[('term0', 'f4'),('term1', 'f4'),('term2', 'f4'),('term0err', 'f4'),('term1err', 'f4'),('term2err', 'f4'),('mat', 'S7'),('ID', 'f4'),])  #converts Nones to nans for calculations
 
@@ -225,7 +225,9 @@ class TimeInterval(object,dbConnection):
 			sp.BB_incand_HG_pkht,
 			sp.BB_incand_LG_pkht,
 			hk.sample_flow,
-			sp.NB_incand_HG_pkht
+			sp.NB_incand_HG_pkht,
+			hk.chamber_temp,
+			hk.chamber_pressure
 		FROM
 			sp2_single_particle_data sp
 				JOIN
@@ -281,16 +283,18 @@ class TimeInterval(object,dbConnection):
 			BB_incand_HG 	= row[2]  	#in arbitrary units
 			BB_incand_LG 	= row[3]  	#in arbitrary units
 			sample_flow 	= row[4]  	#in vccm
+			chamber_temp 	= row[6]+273.15 	#in deg C -> K
+			chamber_pressure= row[7]  			#in Pa
 			
 			if sample_flow == None: #ignore particles if we can't calculate a volume
 				continue
-			if (ind_end_time-ind_start_time) > self.interval_max:  #ignore particles with a huge sample interval (this arises when the SP2 was set to sample only from 1 of every x minutes)
+			if (ind_end_time-ind_start_time) > self.interval_max  or (ind_end_time-ind_start_time) < 0:  #ignore particles with a huge sample interval (this arises when the SP2 was set to sample only from 1 of every x minutes)
 				continue
 			
 			#get appropriate sample factor
 			sample_factor = self.getParticleSampleFactor(ind_end_time)
+			STP_correction_factor = (chamber_pressure/101325)*(273.15/chamber_temp) 
 
-			STP_correction_factor = (self.pressure/101325)*(273.15/self.temperature)
 			particle_sample_vol =  sample_flow*(ind_end_time-ind_start_time)*STP_correction_factor/(60*sample_factor)   #factor of 60 needed because flow is in sccm and time is in seconds
 			interval_sampled_volume += particle_sample_vol
 
@@ -302,7 +306,6 @@ class TimeInterval(object,dbConnection):
 				interval_mass_uncertainty += rBC_mass_uncertainty
 				ved_list.append(VED)
 				
-		
 		interval_data_dict['VED list'] = ved_list
 		interval_data_dict['total mass'] = interval_mass
 		interval_data_dict['total number'] = len(ved_list)

@@ -26,7 +26,9 @@ def defineHKInsertStatement(hk_table):
               sample_flow,
               yag_power,
               sheath_flow,
-              yag_xtal_temp)
+              yag_xtal_temp,
+              chamber_temp,
+              chamber_pressure)
               VALUES (
               %(instr_ID)s,
               %(instr_location_ID)s,
@@ -35,7 +37,9 @@ def defineHKInsertStatement(hk_table):
               %(sample_flow)s,
               %(yag_power)s,
               %(sheath_flow)s,
-              %(yag_xtal_temp)s)''')
+              %(yag_xtal_temp)s,
+              %(chamber_temp)s,
+              %(chamber_pressure)s)''')
 
 	return add_interval
 
@@ -64,8 +68,10 @@ def HKfileToDatabase(hk_file,add_interval,parameters,last_ts,cnx,cursor):
 		'yag_power':    		float(newline[parameters['yag_power_col']    ]),
 		'sheath_flow':  		float(newline[parameters['sheath_flow_col']  ]),
 		'yag_xtal_temp':		float(newline[parameters['yag_xtal_temp_col']]),
+		'chamber_temp':			float(newline[parameters['chamber_temp_col']]),
+		'chamber_pressure':		float(newline[parameters['chamber_pressure_col']])*100  #mBar to Pa ,
 		}
-		
+
 		#convert any NaNs to None for db
 		for key in single_record:
 			if math.isnan(single_record[key]):
